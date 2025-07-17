@@ -73,6 +73,19 @@
             color: #0c5460;
             border: 1px solid #bee5eb;
         }
+        /* Estilos para el campo de contraseña con icono */
+        .password-input-container {
+            position: relative;
+            width: 100%;
+        }
+        .password-toggle-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #6B7280; /* gray-500 */
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-100 to-purple-100 flex flex-col items-center justify-center p-4">
@@ -97,6 +110,7 @@
         // Variables globales para el estado de la aplicación
         let currentView = 'login'; // 'login', 'admin', 'client'
         let selectedClientForUpdate = null; // Cliente seleccionado para actualizar estatus
+        let selectedClientForEdit = null; // Cliente seleccionado para editar datos
 
         // Configuración de los pasos predeterminados del proceso de compra
         const defaultProcessSteps = [
@@ -220,9 +234,19 @@
 
                         <input type="text" id="identifierInput" placeholder="${isClientLogin ? 'Usuario' : 'Usuario (admin)'}"
                             class="w-full p-3 mb-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200" />
-                        <input type="password" id="passwordInput" placeholder="${isClientLogin ? 'Contraseña' : 'Contraseña (admin)'}"
-                            class="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200" />
                         
+                        <div class="password-input-container mb-6">
+                            <input type="password" id="passwordInput" placeholder="${isClientLogin ? 'Contraseña' : 'Contraseña (admin)'}"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200" />
+                            <span class="password-toggle-icon" id="togglePassword">
+                                <!-- Icono de ojo SVG -->
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </span>
+                        </div>
+
                         <button id="loginButton"
                             class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-all duration-300 shadow-md">
                             Ingresar
@@ -243,6 +267,15 @@
                     updateLoginScreen();
                 };
                 document.getElementById('loginButton').onclick = handleLogin;
+
+                // Toggle password visibility
+                const togglePassword = document.getElementById('togglePassword');
+                const passwordInput = document.getElementById('passwordInput');
+                togglePassword.addEventListener('click', function () {
+                    const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                    passwordInput.setAttribute('type', type);
+                    // Cambiar el icono si es necesario (opcional, el SVG ya funciona bien)
+                });
             };
 
             const handleLogin = async () => {
@@ -252,6 +285,7 @@
 
                 if (!identifier || !password) {
                     loginMessage = 'Por favor, ingresa tus credenciales.';
+                    showMessage('Por favor, ingresa tus credenciales.', 'error');
                     updateLoginScreen();
                     return;
                 }
@@ -265,14 +299,27 @@
                         return;
                     }
 
-                    const client = clients.find(c => c.Usuario === identifier && c.Contrasena === password);
+                    const client = clients.find(c => c.Usuario === identifier); // Buscar por usuario primero
 
                     if (client) {
-                        localStorage.setItem('loggedInClientUid', client.ID); // Usamos el ID de la fila como UID
-                        navigateTo('client');
-                        showMessage('¡Bienvenido!', 'success');
+                        // --- Logs de depuración para la contraseña ---
+                        console.log(`Contraseña ingresada (tipo: ${typeof password}, valor: '${password}')`);
+                        console.log(`Contraseña de la hoja (tipo: ${typeof client.Contrasena}, valor: '${client.Contrasena}')`);
+                        // --- Fin de logs de depuración ---
+
+                        // Asegurarse de comparar como strings
+                        if (String(client.Contrasena) === String(password)) {
+                            localStorage.setItem('loggedInClientUid', client.ID); // Usamos el ID de la fila como UID
+                            navigateTo('client');
+                            showMessage('¡Bienvenido!', 'success');
+                        } else {
+                            loginMessage = 'Usuario o contraseña incorrectos.';
+                            showMessage('Usuario o contraseña incorrectos.', 'error');
+                            updateLoginScreen();
+                        }
                     } else {
                         loginMessage = 'Usuario o contraseña incorrectos.';
+                        showMessage('Usuario o contraseña incorrectos.', 'error');
                         updateLoginScreen();
                     }
                 } else { // Admin Login (¡ADVERTENCIA DE SEGURIDAD!)
@@ -289,6 +336,7 @@
                         showMessage('¡Bienvenido Administrador!', 'success');
                     } else {
                         loginMessage = 'Credenciales de administrador incorrectas.';
+                        showMessage('Credenciales de administrador incorrectas.', 'error');
                         updateLoginScreen();
                     }
                 }
@@ -296,6 +344,128 @@
 
             updateLoginScreen(); // Renderizar la pantalla inicial
         };
+
+        /**
+         * Función para poblar los selectores de fecha (Año, Mes, Día).
+         * @param {string} daySelectId - ID del selector de día.
+         * @param {string} monthSelectId - ID del selector de mes.
+         * @param {string} yearSelectId - ID del selector de año.
+         * @param {string} initialDay - Día inicial seleccionado (ej. '01').
+         * @param {string} initialMonth - Mes inicial seleccionado (ej. '01').
+         * @param {string} initialYear - Año inicial seleccionado (ej. '2000').
+         */
+        const populateDateDropdowns = (daySelectId, monthSelectId, yearSelectId, initialDay = '', initialMonth = '', initialYear = '') => {
+            const daySelect = document.getElementById(daySelectId);
+            const monthSelect = document.getElementById(monthSelectId);
+            const yearSelect = document.getElementById(yearSelectId);
+
+            // Limpiar opciones previas
+            daySelect.innerHTML = '<option value="">Día</option>';
+            monthSelect.innerHTML = '<option value="">Mes</option>';
+            yearSelect.innerHTML = '<option value="">Año</option>';
+
+            // Poblar años (ej. desde 1900 hasta el año actual)
+            const currentYear = new Date().getFullYear();
+            for (let i = currentYear; i >= 1900; i--) {
+                const option = document.createElement('option');
+                option.value = String(i);
+                option.textContent = String(i);
+                if (option.value === initialYear) {
+                    option.selected = true;
+                }
+                yearSelect.appendChild(option);
+            }
+
+            // Poblar meses
+            const months = [
+                "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+            ];
+            for (let i = 0; i < months.length; i++) {
+                const option = document.createElement('option');
+                option.value = String(i + 1).padStart(2, '0');
+                option.textContent = months[i];
+                if (option.value === initialMonth) {
+                    option.selected = true;
+                }
+                monthSelect.appendChild(option);
+            }
+
+            // Añadir listeners para actualizar días cuando mes/año cambian
+            const updateDaysInMonth = () => {
+                const year = parseInt(yearSelect.value);
+                const month = parseInt(monthSelect.value);
+                const currentDay = daySelect.value; // Guardar el día actual seleccionado
+
+                // Limpiar y repoblar días
+                daySelect.innerHTML = '<option value="">Día</option>';
+                if (year && month) {
+                    const daysInMonth = new Date(year, month, 0).getDate(); // Día 0 del siguiente mes da el último día del mes actual
+                    for (let i = 1; i <= daysInMonth; i++) {
+                        const option = document.createElement('option');
+                        option.value = String(i).padStart(2, '0');
+                        option.textContent = String(i).padStart(2, '0');
+                        if (parseInt(currentDay) === i) { // Intentar mantener el día seleccionado si es válido
+                            option.selected = true;
+                        }
+                        daySelect.appendChild(option);
+                    }
+                }
+            };
+
+            monthSelect.onchange = updateDaysInMonth;
+            yearSelect.onchange = updateDaysInMonth;
+            // Llamada inicial para poblar los días correctamente
+            updateDaysInMonth();
+        };
+
+        /**
+         * Función para poblar el selector de la lada internacional.
+         * @param {string} selectElementId - ID del selector de lada.
+         * @param {string} defaultCode - Código de país por defecto (ej. '+52').
+         */
+        const populateDialCodeDropdown = (selectElementId, defaultCode = '+52') => {
+            const select = document.getElementById(selectElementId);
+            if (!select) return;
+
+            select.innerHTML = ''; // Limpiar opciones existentes
+
+            const dialCodes = [
+                { code: '+1', name: 'USA/Canadá (+1)' },
+                { code: '+52', name: 'México (+52)' },
+                { code: '+54', name: 'Argentina (+54)' },
+                { code: '+56', name: 'Chile (+56)' },
+                { code: '+57', name: 'Colombia (+57)' },
+                { code: '+34', name: 'España (+34)' },
+                { code: '+51', name: 'Perú (+51)' },
+                { code: '+55', name: 'Brasil (+55)' },
+                { code: '+502', name: 'Guatemala (+502)' },
+                { code: '+503', name: 'El Salvador (+503)' },
+                { code: '+504', name: 'Honduras (+504)' },
+                { code: '+505', name: 'Nicaragua (+505)' },
+                { code: '+506', name: 'Costa Rica (+506)' },
+                { code: '+507', name: 'Panamá (+507)' },
+                { code: '+508', name: 'Saint-Pierre y Miquelon (+508)' },
+                { code: '+509', name: 'Haití (+509)' },
+                { code: '+591', name: 'Bolivia (+591)' },
+                { code: '+593', name: 'Ecuador (+593)' },
+                { code: '+595', name: 'Paraguay (+595)' },
+                { code: '+598', name: 'Uruguay (+598)' },
+                { code: '+599', name: 'Curazao (+599)' },
+                // Agrega más según sea necesario
+            ];
+
+            dialCodes.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.code;
+                option.textContent = item.name;
+                if (item.code === defaultCode) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        };
+
 
         /**
          * Renderiza el panel de administrador.
@@ -317,127 +487,6 @@
                 }
                 updateAdminDashboard();
             };
-
-            // Función para poblar los selectores de fecha
-            const populateDateDropdowns = (initialDay = '', initialMonth = '', initialYear = '') => {
-                const daySelect = document.getElementById('newDobDay');
-                const monthSelect = document.getElementById('newDobMonth');
-                const yearSelect = document.getElementById('newDobYear');
-
-                // Limpiar opciones previas
-                daySelect.innerHTML = '<option value="">Día</option>';
-                monthSelect.innerHTML = '<option value="">Mes</option>';
-                yearSelect.innerHTML = '<option value="">Año</option>';
-
-                // Poblar días
-                for (let i = 1; i <= 31; i++) {
-                    const option = document.createElement('option');
-                    option.value = String(i).padStart(2, '0');
-                    option.textContent = String(i).padStart(2, '0');
-                    if (option.value === initialDay) {
-                        option.selected = true;
-                    }
-                    daySelect.appendChild(option);
-                }
-
-                // Poblar meses
-                const months = [
-                    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-                    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-                ];
-                for (let i = 0; i < months.length; i++) {
-                    const option = document.createElement('option');
-                    option.value = String(i + 1).padStart(2, '0');
-                    option.textContent = months[i];
-                    if (option.value === initialMonth) {
-                        option.selected = true;
-                    }
-                    monthSelect.appendChild(option);
-                }
-
-                // Poblar años (ej. desde 1900 hasta el año actual)
-                const currentYear = new Date().getFullYear();
-                for (let i = currentYear; i >= 1900; i--) {
-                    const option = document.createElement('option');
-                    option.value = String(i);
-                    option.textContent = String(i);
-                    if (option.value === initialYear) {
-                        option.selected = true;
-                    }
-                    yearSelect.appendChild(option);
-                }
-
-                // Añadir listeners para actualizar días cuando mes/año cambian
-                const updateDaysInMonth = () => {
-                    const year = parseInt(yearSelect.value);
-                    const month = parseInt(monthSelect.value);
-                    const currentDay = daySelect.value; // Guardar el día actual seleccionado
-
-                    // Limpiar y repoblar días
-                    daySelect.innerHTML = '<option value="">Día</option>';
-                    if (year && month) {
-                        const daysInMonth = new Date(year, month, 0).getDate(); // Día 0 del siguiente mes da el último día del mes actual
-                        for (let i = 1; i <= daysInMonth; i++) {
-                            const option = document.createElement('option');
-                            option.value = String(i).padStart(2, '0');
-                            option.textContent = String(i).padStart(2, '0');
-                            if (option.value === currentDay) { // Intentar mantener el día seleccionado
-                                option.selected = true;
-                            }
-                            daySelect.appendChild(option);
-                        }
-                    }
-                };
-
-                monthSelect.onchange = updateDaysInMonth;
-                yearSelect.onchange = updateDaysInMonth;
-                // Llamada inicial para poblar los días correctamente
-                updateDaysInMonth();
-            };
-
-            // Función para poblar el selector de la lada internacional
-            const populateDialCodeDropdown = (selectElementId, defaultCode = '+52') => {
-                const select = document.getElementById(selectElementId);
-                if (!select) return;
-
-                select.innerHTML = ''; // Limpiar opciones existentes
-
-                const dialCodes = [
-                    { code: '+1', name: 'USA/Canadá (+1)' },
-                    { code: '+52', name: 'México (+52)' },
-                    { code: '+54', name: 'Argentina (+54)' },
-                    { code: '+56', name: 'Chile (+56)' },
-                    { code: '+57', name: 'Colombia (+57)' },
-                    { code: '+34', name: 'España (+34)' },
-                    { code: '+51', name: 'Perú (+51)' },
-                    { code: '+55', name: 'Brasil (+55)' },
-                    { code: '+502', name: 'Guatemala (+502)' },
-                    { code: '+503', name: 'El Salvador (+503)' },
-                    { code: '+504', name: 'Honduras (+504)' },
-                    { code: '+505', name: 'Nicaragua (+505)' },
-                    { code: '+506', name: 'Costa Rica (+506)' },
-                    { code: '+507', name: 'Panamá (+507)' },
-                    { code: '+508', name: 'Saint-Pierre y Miquelon (+508)' },
-                    { code: '+509', name: 'Haití (+509)' },
-                    { code: '+591', name: 'Bolivia (+591)' },
-                    { code: '+593', name: 'Ecuador (+593)' },
-                    { code: '+595', name: 'Paraguay (+595)' },
-                    { code: '+598', name: 'Uruguay (+598)' },
-                    { code: '+599', name: 'Curazao (+599)' },
-                    // Agrega más según sea necesario
-                ];
-
-                dialCodes.forEach(item => {
-                    const option = document.createElement('option');
-                    option.value = item.code;
-                    option.textContent = item.name;
-                    if (item.code === defaultCode) {
-                        option.selected = true;
-                    }
-                    select.appendChild(option);
-                });
-            };
-
 
             const updateAdminDashboard = () => {
                 appContainer.innerHTML = `
@@ -465,9 +514,9 @@
                                         class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                                     
                                     <div class="col-span-1 md:col-span-2 grid grid-cols-3 gap-2">
-                                        <select id="newDobDay" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
-                                        <select id="newDobMonth" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
                                         <select id="newDobYear" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
+                                        <select id="newDobMonth" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
+                                        <select id="newDobDay" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
                                     </div>
 
                                     <div class="col-span-1 md:col-span-2 grid grid-cols-3 gap-2">
@@ -491,19 +540,35 @@
                         <div id="clientsList" class="space-y-4">
                             ${clients.length === 0 ? `
                                 <p class="text-gray-600 text-center py-8">No hay clientes registrados aún.</p>
-                            ` : clients.map(client => `
+                            ` : clients.map(client => {
+                                const processSteps = JSON.parse(client.PasosProceso || '[]');
+                                const completedCount = processSteps.filter(step => step.completed).length;
+                                const totalCount = processSteps.length;
+                                const currentStepIndex = processSteps.findIndex(step => !step.completed);
+                                const currentStepName = currentStepIndex !== -1 ? processSteps[currentStepIndex].stepName : 'Completado';
+                                const progressText = totalCount > 0 ? `Paso ${completedCount}/${totalCount}: ${currentStepName}` : 'Sin progreso';
+
+                                return `
                                 <div class="bg-gray-50 p-4 rounded-xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center">
                                     <div>
                                         <p class="font-semibold text-lg text-gray-800">${client.Nombre} ${client.ApellidoPaterno}</p>
                                         <p class="text-sm text-gray-600">Casa: ${client.DetallesCasa}</p>
-                                        <p class="text-sm text-gray-600">Usuario: <span class="font-mono">${client.Usuario}</span> | Contraseña: <span class="font-mono">${client.Contrasena}</span></p>
+                                        <p class="text-sm text-gray-600">Usuario: <span class="font-mono">${client.Usuario}</span> | Contraseña: <span class="font-mono">${String(client.Contrasena).padStart(6, '0')}</span></p>
+                                        <p class="text-sm font-medium text-blue-700 mt-1">${progressText}</p>
                                     </div>
-                                    <button data-client-id="${client.ID}"
-                                        class="update-status-btn mt-3 sm:mt-0 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all duration-300 shadow-md text-sm">
-                                        Actualizar Estatus
-                                    </button>
+                                    <div class="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
+                                        <button data-client-id="${client.ID}"
+                                            class="edit-client-btn px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 shadow-md text-sm">
+                                            Editar Cliente
+                                        </button>
+                                        <button data-client-id="${client.ID}"
+                                            class="update-status-btn px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all duration-300 shadow-md text-sm">
+                                            Actualizar Estatus
+                                        </button>
+                                    </div>
                                 </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 `;
@@ -515,15 +580,14 @@
                     adminMessage = ''; // Limpiar mensaje al alternar formulario
                     updateAdminDashboard();
                     if (showRegisterForm) {
-                        populateDateDropdowns(); // Llenar los desplegables de fecha
+                        populateDateDropdowns('newDobDay', 'newDobMonth', 'newDobYear'); // Llenar los desplegables de fecha
                         populateDialCodeDropdown('newWhatsappDialCode'); // Llenar el desplegable de lada
                     }
                 };
 
                 if (showRegisterForm) {
                     document.getElementById('registerClientBtn').onclick = handleRegisterClient;
-                    populateDateDropdowns(); // Asegurarse de que se llenen si el formulario ya estaba visible
-                    populateDialCodeDropdown('newWhatsappDialCode'); // Asegurarse de que se llenen si el formulario ya estaba visible
+                    // populateDateDropdowns y populateDialCodeDropdown ya se llaman en el toggle
                 }
 
                 document.querySelectorAll('.update-status-btn').forEach(button => {
@@ -531,6 +595,14 @@
                         const clientId = e.target.dataset.clientId;
                         selectedClientForUpdate = clients.find(c => c.ID === clientId);
                         renderUpdateStatusModal();
+                    };
+                });
+
+                document.querySelectorAll('.edit-client-btn').forEach(button => {
+                    button.onclick = (e) => {
+                        const clientId = e.target.dataset.clientId;
+                        selectedClientForEdit = clients.find(c => c.ID === clientId);
+                        renderEditClientModal();
                     };
                 });
             };
@@ -550,36 +622,53 @@
                 const day = document.getElementById('newDobDay').value;
                 const month = document.getElementById('newDobMonth').value;
                 const year = document.getElementById('newDobYear').value;
-                const dob = `${day}/${month}/${year}`; // Formato DD/MM/YYYY
                 
                 // Obtener valores de los desplegables de WhatsApp
                 const newWhatsappDialCode = document.getElementById('newWhatsappDialCode').value;
-                const newWhatsappLocalNumber = document.getElementById('newWhatsappLocalNumber').value;
+                const newWhatsappLocalNumberRaw = document.getElementById('newWhatsappLocalNumber').value;
+                const newWhatsappLocalNumberCleaned = newWhatsappLocalNumberRaw.replace(/\s/g, ''); // Eliminar espacios
                 
                 const houseDetails = document.getElementById('newHouseDetails').value;
 
-                // Validación de entradas
-                if (!name || !paternalLastName || !day || !month || !year || !newWhatsappDialCode || !newWhatsappLocalNumber || !houseDetails) {
+                // Validación de campos vacíos
+                if (!name || !paternalLastName || !day || !month || !year || !newWhatsappDialCode || !newWhatsappLocalNumberCleaned || !houseDetails) {
                     adminMessage = 'Por favor, completa todos los campos obligatorios, incluyendo la fecha de nacimiento y el número de WhatsApp.';
                     updateAdminDashboard();
                     showMessage('Por favor, completa todos los campos obligatorios.', 'error');
                     return;
                 }
                 
-                // Validación de fecha válida (ej. 31 de febrero)
-                const parsedDate = new Date(`${year}-${month}-${day}`);
-                if (isNaN(parsedDate.getTime()) || parsedDate.getMonth() + 1 !== parseInt(month) || parsedDate.getDate() !== parseInt(day)) {
+                // --- Validación de fecha de nacimiento mejorada ---
+                console.log(`Validando fecha de nacimiento: Día=${day}, Mes=${month}, Año=${year}`);
+                const parsedYear = parseInt(year);
+                const parsedMonth = parseInt(month); // 1-indexed month
+                const parsedDay = parseInt(day);
+
+                // Crear un objeto Date usando valores numéricos (el mes es 0-indexed para el constructor Date)
+                const testDate = new Date(parsedYear, parsedMonth - 1, parsedDay);
+
+                console.log(`Fecha parseada por JS Date: ${testDate.toLocaleDateString()} (isValid: ${!isNaN(testDate.getTime())})`);
+                console.log(`Año de testDate: ${testDate.getFullYear()}, Mes de testDate: ${testDate.getMonth() + 1}, Día de testDate: ${testDate.getDate()}`);
+
+                // Validar si la fecha parseada coincide con la fecha de entrada (maneja desbordamientos como 30 de febrero -> 1 de marzo)
+                if (isNaN(testDate.getTime()) ||
+                    testDate.getFullYear() !== parsedYear ||
+                    testDate.getMonth() + 1 !== parsedMonth || // Comparar con el mes 1-indexed
+                    testDate.getDate() !== parsedDay) {
                     adminMessage = 'Fecha de nacimiento inválida. Por favor, selecciona una fecha válida.';
                     updateAdminDashboard();
-                    showMessage('Fecha de nacimiento inválida.', 'error');
+                    showMessage('Fecha de nacimiento inválida. Verifica el día para el mes y año seleccionados.', 'error');
                     return;
                 }
+                // --- Fin de validación de fecha de nacimiento mejorada ---
 
-                // Validación de número de WhatsApp (exactamente 10 dígitos)
-                if (!/^\d{10}$/.test(newWhatsappLocalNumber)) {
-                    adminMessage = 'El número de WhatsApp debe ser de 10 dígitos numéricos.';
+                const dob = `${day}/${month}/${year}`; // Formato DD/MM/YYYY
+                
+                // Validación de número de WhatsApp (exactamente 10 dígitos después de limpiar espacios)
+                if (!/^\d{10}$/.test(newWhatsappLocalNumberCleaned)) {
+                    adminMessage = 'El número de WhatsApp debe ser de 10 dígitos numéricos (sin incluir la lada).';
                     updateAdminDashboard();
-                    showMessage('El número de WhatsApp debe ser de 10 dígitos numéricos.', 'error');
+                    showMessage('El número de WhatsApp debe ser de 10 dígitos numéricos (sin incluir la lada).', 'error');
                     return;
                 }
 
@@ -587,9 +676,10 @@
                                 .toLowerCase()
                                 .normalize("NFD")
                                 .replace(/[\u0300-\u036f]/g, "");
-                const password = dob.replace(/[^0-9]/g, ''); // Quita diagonales para la contraseña
+                // Generar contraseña en formato DDMMYY
+                const password = day + month + year.substring(2, 4);
 
-                const fullWhatsappNumber = newWhatsappDialCode + newWhatsappLocalNumber; // Combina lada y número local
+                const fullWhatsappNumber = newWhatsappDialCode + newWhatsappLocalNumberCleaned; // Combina lada y número local limpio
 
                 const newClientData = {
                     Nombre: name,
@@ -639,6 +729,60 @@
             // Los pasos del proceso se almacenan como string JSON en la hoja, así que hay que parsearlos
             let currentProcessSteps = JSON.parse(selectedClientForUpdate.PasosProceso || '[]');
             let modalMessage = '';
+
+            // Define las funciones del modal antes de que se usen en innerHTML
+            const closeModal = () => {
+                const modal = document.getElementById('updateStatusModalContainer');
+                if (modal) {
+                    modal.remove();
+                }
+                selectedClientForUpdate = null;
+                // Re-renderiza el dashboard del admin para reflejar cualquier cambio
+                renderAdminDashboard();
+            };
+
+            const handleUpdateStatus = async () => {
+                updateModalMessage('');
+                const result = await callAppsScript('updateClient', {
+                    id: selectedClientForUpdate.ID,
+                    PasosProceso: JSON.stringify(currentProcessSteps)
+                });
+                if (result) {
+                    updateModalMessage('Estatus actualizado exitosamente!', 'success');
+                    showMessage('Estatus actualizado para ' + selectedClientForUpdate.Nombre, 'success');
+                } else {
+                    updateModalMessage('Error al actualizar estatus. Inténtalo de nuevo.', 'error');
+                }
+            };
+
+            const handleSendWhatsApp = () => {
+                updateModalMessage('');
+                const completedSteps = currentProcessSteps.filter(step => step.completed).map(step => step.stepName);
+                const pendingSteps = currentProcessSteps.filter(step => !step.completed).map(step => step.stepName);
+
+                let whatsappMessage = `¡Hola ${selectedClientForUpdate.Nombre}!\n\n`;
+                whatsappMessage += `Hemos actualizado el estatus de tu proceso de compra de casa.\n\n`;
+                whatsappMessage += `*Pasos Completados:*\n`;
+                if (completedSteps.length > 0) {
+                    whatsappMessage += completedSteps.map(step => `✅ ${step}`).join('\n');
+                } else {
+                    whatsappMessage += 'Ninguno aún.\n';
+                }
+                whatsappMessage += `\n*Próximos Pasos:*\n`;
+                if (pendingSteps.length > 0) {
+                    whatsappMessage += pendingSteps.map(step => `⏳ ${step}`).join('\n');
+                } else {
+                    whatsappMessage += '¡Felicidades, todos los pasos están completados!\n';
+                }
+                whatsappMessage += `\nPara ver el detalle, ingresa a la plataforma con tu usuario y contraseña.`;
+
+                // Asegurarse de que selectedClientForUpdate.Whatsapp sea una cadena antes de usar .replace()
+                const whatsappNumberForUrl = String(selectedClientForUpdate.Whatsapp).replace('+', '');
+                const whatsappUrl = `https://wa.me/${whatsappNumberForUrl}?text=${encodeURIComponent(whatsappMessage)}`;
+                window.open(whatsappUrl, '_blank');
+                updateModalMessage('Mensaje de WhatsApp generado. Revisa la nueva pestaña.', 'info');
+                showMessage('Mensaje de WhatsApp generado.', 'info');
+            };
 
             let modalDiv = document.getElementById('updateStatusModalContainer');
             if (!modalDiv) {
@@ -692,6 +836,7 @@
                 }
             };
 
+            // Adjuntar listeners de eventos DESPUÉS de que el innerHTML ha sido establecido
             document.getElementById('closeModalBtn').onclick = closeModal;
             document.getElementById('saveStatusBtn').onclick = handleUpdateStatus;
             document.getElementById('sendWhatsappBtn').onclick = handleSendWhatsApp;
@@ -712,60 +857,173 @@
                     };
                 }
             });
+        };
 
+        /**
+         * Renderiza el modal para editar los datos de un cliente.
+         */
+        const renderEditClientModal = () => {
+            if (!selectedClientForEdit) return;
+
+            let modalMessage = '';
+            
+            // Parsear la fecha de nacimiento para preseleccionar los desplegables
+            const dobParts = String(selectedClientForEdit.FechaNacimiento).split('/'); // Ensure FechaNacimiento is a string
+            const initialDay = dobParts[0];
+            const initialMonth = dobParts[1];
+            const initialYear = dobParts[2];
+
+            // Parsear el número de WhatsApp para preseleccionar la lada y el número local
+            let initialDialCode = '+52'; // Default
+            let initialLocalNumber = String(selectedClientForEdit.Whatsapp); // Ensure Whatsapp is a string
+            const dialCodePattern = /^\+(\d+)/;
+            const match = initialLocalNumber.match(dialCodePattern); // Use initialLocalNumber (which is now a string)
+            if (match) {
+                initialDialCode = match[0]; // Captura el código con el '+'
+                initialLocalNumber = initialLocalNumber.substring(match[0].length);
+            }
+
+
+            let modalDiv = document.getElementById('editClientModalContainer');
+            if (!modalDiv) {
+                modalDiv = document.createElement('div');
+                modalDiv.id = 'editClientModalContainer';
+                modalDiv.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50';
+                document.body.appendChild(modalDiv);
+            }
+
+            // Define las funciones del modal antes de que se usen en innerHTML
             const closeModal = () => {
-                const modal = document.getElementById('updateStatusModalContainer');
+                const modal = document.getElementById('editClientModalContainer');
                 if (modal) {
                     modal.remove();
                 }
-                selectedClientForUpdate = null;
-                // Re-renderiza el dashboard del admin para reflejar cualquier cambio
-                renderAdminDashboard();
+                selectedClientForEdit = null;
+                renderAdminDashboard(); // Re-renderizar el dashboard para reflejar cambios
             };
 
-            const handleUpdateStatus = async () => {
-                updateModalMessage('');
-                const result = await callAppsScript('updateClient', {
-                    id: selectedClientForUpdate.ID,
-                    PasosProceso: JSON.stringify(currentProcessSteps)
-                });
+            const handleSaveClientChanges = async () => {
+                modalMessage = '';
+                const name = document.getElementById('editName').value;
+                const paternalLastName = document.getElementById('editPaternalLastName').value;
+                
+                const day = document.getElementById('editDobDay').value;
+                const month = document.getElementById('editDobMonth').value;
+                const year = document.getElementById('editDobYear').value;
+                const dob = `${day}/${month}/${year}`;
+                
+                const whatsappDialCode = document.getElementById('editWhatsappDialCode').value;
+                const whatsappLocalNumberRaw = document.getElementById('editWhatsappLocalNumber').value;
+                const whatsappLocalNumberCleaned = whatsappLocalNumberRaw.replace(/\s/g, '');
+
+                const houseDetails = document.getElementById('editHouseDetails').value;
+
+                // Validación de campos vacíos
+                if (!name || !paternalLastName || !day || !month || !year || !whatsappDialCode || !whatsappLocalNumberCleaned || !houseDetails) {
+                    modalMessage = 'Por favor, completa todos los campos obligatorios.';
+                    updateModalContent();
+                    showMessage('Por favor, completa todos los campos obligatorios.', 'error');
+                    return;
+                }
+
+                // Validación de fecha válida
+                const parsedYear = parseInt(year);
+                const parsedMonth = parseInt(month);
+                const parsedDay = parseInt(day);
+                const testDate = new Date(parsedYear, parsedMonth - 1, parsedDay);
+                if (isNaN(testDate.getTime()) || testDate.getFullYear() !== parsedYear || testDate.getMonth() + 1 !== parsedMonth || testDate.getDate() !== parsedDay) {
+                    modalMessage = 'Fecha de nacimiento inválida. Por favor, selecciona una fecha válida.';
+                    updateModalContent();
+                    showMessage('Fecha de nacimiento inválida.', 'error');
+                    return;
+                }
+
+                // Validación de número de WhatsApp (10 dígitos)
+                if (!/^\d{10}$/.test(whatsappLocalNumberCleaned)) {
+                    modalMessage = 'El número de WhatsApp debe ser de 10 dígitos numéricos.';
+                    updateModalContent();
+                    showMessage('El número de WhatsApp debe ser de 10 dígitos numéricos.', 'error');
+                    return;
+                }
+
+                const fullWhatsappNumber = whatsappDialCode + whatsappLocalNumberCleaned;
+
+                const updatedClientData = {
+                    id: selectedClientForEdit.ID, // ID del cliente para la actualización
+                    Nombre: name,
+                    ApellidoPaterno: paternalLastName,
+                    FechaNacimiento: dob,
+                    Whatsapp: fullWhatsappNumber,
+                    DetallesCasa: houseDetails,
+                    // No se actualizan Usuario y Contrasena desde aquí
+                };
+
+                const result = await callAppsScript('updateClientDetails', updatedClientData);
                 if (result) {
-                    updateModalMessage('Estatus actualizado exitosamente!', 'success');
-                    showMessage('Estatus actualizado para ' + selectedClientForUpdate.Nombre, 'success');
+                    modalMessage = 'Cambios guardados exitosamente!';
+                    showMessage('Cliente actualizado exitosamente!', 'success');
+                    closeModal(); // Cerrar modal y refrescar dashboard
                 } else {
-                    updateModalMessage('Error al actualizar estatus. Inténtalo de nuevo.', 'error');
+                    modalMessage = 'Error al guardar cambios. Inténtalo de nuevo.';
+                    updateModalContent();
+                    showMessage('Error al guardar cambios.', 'error');
                 }
             };
 
-            const handleSendWhatsApp = () => {
-                updateModalMessage('');
-                const completedSteps = currentProcessSteps.filter(step => step.completed).map(step => step.stepName);
-                const pendingSteps = currentProcessSteps.filter(step => !step.completed).map(step => step.stepName);
+            const updateModalContent = () => {
+                modalDiv.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-2xl max-w-md w-full relative">
+                        <button id="closeEditModalBtn"
+                            class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold">
+                            &times;
+                        </button>
+                        <h3 class="text-2xl font-extrabold text-gray-800 mb-6">
+                            Editar Cliente: ${selectedClientForEdit.Nombre} ${selectedClientForEdit.ApellidoPaterno}
+                        </h3>
 
-                let whatsappMessage = `¡Hola ${selectedClientForUpdate.Nombre}!\n\n`;
-                whatsappMessage += `Hemos actualizado el estatus de tu proceso de compra de casa.\n\n`;
-                whatsappMessage += `*Pasos Completados:*\n`;
-                if (completedSteps.length > 0) {
-                    whatsappMessage += completedSteps.map(step => `✅ ${step}`).join('\n');
-                } else {
-                    whatsappMessage += 'Ninguno aún.\n';
-                }
-                whatsappMessage += `\n*Próximos Pasos:*\n`;
-                if (pendingSteps.length > 0) {
-                    whatsappMessage += pendingSteps.map(step => `⏳ ${step}`).join('\n');
-                } else {
-                    whatsappMessage += '¡Felicidades, todos los pasos están completados!\n';
-                }
-                whatsappMessage += `\nPara ver el detalle, ingresa a la plataforma con tu usuario y contraseña.`;
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <input type="text" id="editName" placeholder="Nombre del Cliente" required
+                                class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                value="${selectedClientForEdit.Nombre || ''}" />
+                            <input type="text" id="editPaternalLastName" placeholder="Apellido Paterno" required
+                                class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                value="${selectedClientForEdit.ApellidoPaterno || ''}" />
+                            
+                            <div class="col-span-1 md:col-span-2 grid grid-cols-3 gap-2">
+                                <select id="editDobYear" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
+                                <select id="editDobMonth" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
+                                <select id="editDobDay" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></select>
+                            </div>
 
-                // Eliminar el '+' de la lada para la URL de WhatsApp
-                const whatsappNumberForUrl = selectedClientForUpdate.Whatsapp.replace('+', '');
-                const whatsappUrl = `https://wa.me/${whatsappNumberForUrl}?text=${encodeURIComponent(whatsappMessage)}`;
-                window.open(whatsappUrl, '_blank');
-                updateModalMessage('Mensaje de WhatsApp generado. Revisa la nueva pestaña.', 'info');
-                showMessage('Mensaje de WhatsApp generado.', 'info');
+                            <div class="col-span-1 md:col-span-2 grid grid-cols-3 gap-2">
+                                <select id="editWhatsappDialCode" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 col-span-1"></select>
+                                <input type="tel" id="editWhatsappLocalNumber" placeholder="Número de WhatsApp (10 dígitos)" required
+                                    class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 col-span-2"
+                                    value="${initialLocalNumber || ''}" />
+                            </div>
+                            
+                            <textarea id="editHouseDetails" placeholder="Detalles de la Casa que Adquiere" rows="3" required
+                                class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 col-span-1 md:col-span-2">${selectedClientForEdit.DetallesCasa || ''}</textarea>
+                        </div>
+                        <button id="saveClientChangesBtn"
+                            class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-all duration-300 shadow-md">
+                            Guardar Cambios
+                        </button>
+                        <p id="editModalMessage" class="mt-4 text-center text-sm text-red-600">${modalMessage}</p>
+                    </div>
+                `;
+
+                // Adjuntar listeners y poblar desplegables después de que el HTML esté en el DOM
+                document.getElementById('closeEditModalBtn').onclick = closeModal;
+                document.getElementById('saveClientChangesBtn').onclick = handleSaveClientChanges;
+
+                populateDateDropdowns('editDobDay', 'editDobMonth', 'editDobYear', initialDay, initialMonth, initialYear);
+                populateDialCodeDropdown('editWhatsappDialCode', initialDialCode);
             };
+
+            updateModalContent(); // Renderizar el contenido inicial del modal
         };
+
 
         /**
          * Renderiza el panel del cliente.
